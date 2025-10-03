@@ -1,3 +1,6 @@
-title: My Dev Notes
-description: Guides, fixes, and setup docs
+title: Aayus — Migrations & Dev Notes
+description: Notion to AppFlowy migration, AppFlowy-Cloud setup, and real-world fixes.
 theme: jekyll-theme-cayman
+markdown: kramdown
+kramdown:
+  input: GFM
