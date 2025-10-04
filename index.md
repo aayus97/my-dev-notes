@@ -17,10 +17,6 @@ Welcome! This site tracks my hands-on notes for **Notion → AppFlowy** migratio
 - **Troubleshooting**
   - [Common Errors & Fixes](guides/troubleshooting.md)
 
-- **Publishing (Meta)**
-  - [Publish on GitHub Pages](guides/github-pages.md)
-  - [Use a Custom Domain](guides/custom-domain.md)
-
 ---
 
 ### Quick Start (TL;DR)
