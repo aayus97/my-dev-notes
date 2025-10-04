@@ -5,10 +5,9 @@ description: "From fresh clone to a working AppFlowy-Cloud at http://localhost, 
 
 # 🚀 AppFlowy-Cloud Setup (localhost)
 
-This guide explains how to run **AppFlowy-Cloud** locally at [http://localhost](http://localhost), with:
-
+This is a clean, repeatable path to a working **AppFlowy-Cloud** at [http://localhost](http://localhost), including:
 - sane `.env`
-- `docker-compose.override.yml` to stop GoTrue crashes
+- `docker-compose.override.yml` to prevent GoTrue boolean parsing crashes
 - MinIO behind Nginx with **presigned uploads**
 - large file upload settings (avoid 413/timeout for Notion ZIPs)
 - verifications & health checks
@@ -32,8 +31,11 @@ This guide explains how to run **AppFlowy-Cloud** locally at [http://localhost](
 git clone https://github.com/AppFlowy-IO/AppFlowy-Cloud.git
 cd AppFlowy-Cloud
 cp dev.env .env
-Edit .env
-Open .env and replace the relevant sections with these values (leave other lines as-is):
+```
+
+Edit `.env` with **only these changes (leave the rest):**
+
+```bash
 # --- Core URLs (critical) ---
 APPFLOWY_BASE_URL=http://localhost
 APPFLOWY_WEB_URL=http://localhost
@@ -43,13 +45,13 @@ APPFLOWY_S3_PRESIGNED_URL_ENDPOINT=http://localhost/minio-api
 GOTRUE_ADMIN_EMAIL=admin@localhost
 GOTRUE_ADMIN_PASSWORD=ChangeMe123!
 
-# --- JWT secret (any long random string) ---
+# JWT secret (any long random string)
 GOTRUE_JWT_SECRET=super_secret_change_me
 
-# --- Reverse-proxy path for GoTrue ---
+# GoTrue sits behind Nginx at /gotrue
 API_EXTERNAL_URL=/gotrue
 
-# --- Email: local dev (autoconfirm, no SMTP) ---
+# --- Email: local dev (no confirmations, no SMTP) ---
 GOTRUE_MAILER_AUTOCONFIRM=true
 APPFLOWY_MAILER_SMTP_HOST=
 APPFLOWY_MAILER_SMTP_USERNAME=
@@ -63,8 +65,22 @@ AWS_SECRET=minioadmin
 
 # --- Optional: silence AI indexer warnings if no OpenAI key ---
 APPFLOWY_INDEXER_ENABLED=false
-3) Prevent GoTrue crashes
-Create a file named docker-compose.override.yml in the repo root:
+```
+
+**Why these matter:**
+
+- `APPFLOWY_BASE_URL` / `APPFLOWY_WEB_URL` → absolute links & CORS  
+- `APPFLOWY_S3_PRESIGNED_URL_ENDPOINT` must match Nginx: `http://localhost/minio-api`  
+- `API_EXTERNAL_URL=/gotrue` so GoTrue behaves under `/gotrue`  
+- `GOTRUE_MAILER_AUTOCONFIRM=true` = sign-in without SMTP for local dev  
+
+---
+
+## 3) Prevent GoTrue from crashing on empty booleans
+
+Create `docker-compose.override.yml` in the repo root:
+
+```yaml
 services:
   gotrue:
     environment:
@@ -73,12 +89,24 @@ services:
       GOTRUE_EXTERNAL_DISCORD_ENABLED: "false"
       GOTRUE_EXTERNAL_APPLE_ENABLED: "false"
       GOTRUE_SAML_ENABLED: "false"
-4) Nginx: enable large ZIP uploads & long timeouts
-Check your nginx/nginx.conf contains these blocks:
-# Allow big uploads globally
+```
+
+**Fixes:**
+```
+fatal: strconv.ParseBool: parsing "": invalid syntax
+```
+
+---
+
+## 4) Nginx: large ZIP uploads & long timeouts
+
+Ensure your Nginx config (`nginx/nginx.conf`) has:
+
+```nginx
+# big uploads globally
 client_max_body_size 2G;
 
-# Import endpoint
+# import endpoint (long timeouts + no buffering)
 location /api/import {
   proxy_pass $appflowy_cloud_backend;
 
@@ -92,7 +120,7 @@ location /api/import {
   client_max_body_size 2G;
 }
 
-# MinIO presigned uploads
+# presigned uploads to MinIO via Nginx
 location /minio-api/ {
   proxy_pass $minio_api_backend;
   proxy_set_header Host $minio_internal_host;
@@ -105,69 +133,87 @@ location /minio-api/ {
   proxy_read_timeout 600s;
   proxy_send_timeout 600s;
 }
-To verify inside the container:
+```
+
+**Verify inside the container after it starts:**
+
+```bash
 docker compose exec nginx sh -lc 'nginx -T | sed -n "1,220p" | \
 grep -nE "client_max_body_size|/minio-api/|/api/import|proxy_request_buffering|read_timeout|send_timeout"'
-5) Bring everything up
-docker compose up -d
-docker compose ps
-Expected:
-postgres → healthy
-gotrue → healthy
-appflowy_cloud → Up
-nginx, minio, redis → Up
-(optional) admin_frontend, appflowy_web, appflowy_worker → Up
-6) Health checks
-# GoTrue
-curl -i http://localhost/gotrue/health
-
-# AppFlowy backend
-curl -i http://localhost/api/server-info
-
-# MinIO UI (browser)
-open http://localhost/minio
-7) Admin Console
-Open in browser:
-http://localhost/console
-Login with:
-Email: admin@localhost
-Password: ChangeMe123!
-8) Create a user
-Go to:
-http://localhost
-Sign up as your regular user (not admin).
-9) Quick success path (TL;DR)
-cp dev.env .env
-
-# edit .env with:
-# APPFLOWY_BASE_URL=http://localhost
-# APPFLOWY_WEB_URL=http://localhost
-# APPFLOWY_S3_PRESIGNED_URL_ENDPOINT=http://localhost/minio-api
-# GOTRUE_ADMIN_EMAIL=admin@localhost
-# GOTRUE_ADMIN_PASSWORD=ChangeMe123!
-# GOTRUE_JWT_SECRET=super_secret_change_me
-# API_EXTERNAL_URL=/gotrue
-# GOTRUE_MAILER_AUTOCONFIRM=true
-# APPFLOWY_INDEXER_ENABLED=false
-
-# create docker-compose.override.yml with all SSO flags set to "false"
-cat > docker-compose.override.yml <<'YAML'
-services:
-  gotrue:
-    environment:
-      GOTRUE_EXTERNAL_GOOGLE_ENABLED: "false"
-      GOTRUE_EXTERNAL_GITHUB_ENABLED: "false"
-      GOTRUE_EXTERNAL_DISCORD_ENABLED: "false"
-      GOTRUE_EXTERNAL_APPLE_ENABLED: "false"
-      GOTRUE_SAML_ENABLED: "false"
-YAML
-
-docker compose up -d
-curl -i http://localhost/gotrue/health
-curl -i http://localhost/api/server-info
+```
 
 ---
 
-✅ This is now **fully copyable as one `.md` file**.  
+## 5) Bring everything up
 
-Would you like me to package this into a downloadable `index.md` file (so you can just drop it into your repo), or keep it inline like above?
+```bash
+docker compose up -d
+docker compose ps
+```
+
+**You want to see:**
+
+```
+postgres: healthy
+gotrue: healthy
+appflowy_cloud: Up
+nginx, minio, redis: Up
+(optional) admin_frontend, appflowy_web, appflowy_worker: Up
+```
+
+---
+
+## 6) Health checks
+
+```bash
+# GoTrue
+curl -i http://localhost/gotrue/health
+
+# AppFlowy backend ready = 200
+curl -i http://localhost/api/server-info
+
+# MinIO UI reverse-proxied
+open http://localhost/minio
+```
+
+---
+
+## 7) Admin Console
+
+Open [http://localhost/console](http://localhost/console)
+
+Login (from `.env`):
+
+```
+Email: admin@localhost
+Password: ChangeMe123!
+```
+
+---
+
+## 8) Create a user & log in to AppFlowy Web
+
+Visit [http://localhost](http://localhost) and sign up as your regular user (not the admin).
+
+---
+
+## 9) Quick success path (TL;DR)
+
+```bash
+cp dev.env .env
+# Set:
+#  APPFLOWY_BASE_URL=http://localhost
+#  APPFLOWY_WEB_URL=http://localhost
+#  APPFLOWY_S3_PRESIGNED_URL_ENDPOINT=http://localhost/minio-api
+#  GOTRUE_ADMIN_EMAIL=admin@localhost
+#  GOTRUE_ADMIN_PASSWORD=ChangeMe123!
+#  GOTRUE_JWT_SECRET=super_secret_change_me
+#  API_EXTERNAL_URL=/gotrue
+#  GOTRUE_MAILER_AUTOCONFIRM=true
+#  APPFLOWY_INDEXER_ENABLED=false
+
+# Create docker-compose.override.yml with all SSO booleans "false"
+docker compose up -d
+curl -i http://localhost/gotrue/health
+curl -i http://localhost/api/server-info
+```
