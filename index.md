@@ -14,9 +14,6 @@ Welcome! This site tracks my hands-on notes for **Notion → AppFlowy** migratio
 - **Prereqs & Infra**
   - [AppFlowy-Cloud Setup (localhost)](guides/appflowy-cloud-setup.md)
 
-- **Troubleshooting**
-  - [Common Errors & Fixes](guides/troubleshooting.md)
-
 ---
 
 ### Quick Start (TL;DR)
